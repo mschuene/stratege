@@ -1,11 +1,8 @@
-* rewriting
-  Strategy based term rewriting library for clojure.
- 
-  Based on the following ideas:
-  - operate on terms through zippers
-  - separate rules from strategies
-  - provide strategy combinators
-  - strategies are written in a cps style so that they don't blow up the stack
+* Stratege
+  Stratege is a strategy based term rewriting library for clojure, which is based on the following ideas:
+  - operate on terms through zippers.
+  - separate rules from strategies using composeable strategy combinators like StrategoXT does.
+  - strategies are written in a cps style so that they don't blow up the stack.
 
 * usage
-  
+  Comming soon.
