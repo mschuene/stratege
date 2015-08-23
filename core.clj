@@ -373,31 +373,38 @@
 
 ;;match and replace
 
+(defn build-match-on-form
+  "builds the form the match is performed on for the strategic-match macro"
+  [specification bs locs]
+  (m/match specification
+    :node (list (list :zip-node bs) locs)
+    :loc locs
+    :bindings bs
+    [a & rest] (apply conj [(build-match-on-form a bs locs)]
+                      (map #(build-match-on-form % bs locs) rest))
+    :else (throw (Exception. "unsupported match-on form"))))
+
 (defmacro strategic-match
-  "matches on the current term, right hand sides are strategies"
+  "matches on the current term, right hand sides are strategies.
+   First argument can be an option-map. Currently supported options are:
+   :match-on - specifies on what the match call is made. Possible values are
+   :node :loc :bindings :state or a vector containing this keys like [:node :bindings :loc].
+   Defaults to :node."
   [& args]
-  (let [options-map (or (and (map? (first args)) (first args)) {})
-        args (if (map? (first args)) (rest args) args)
+  (let [options-map (merge {:match-on :node} (when (odd? (count args)) (first args)))
+        args (if (odd? (count args)) (rest args) args)
         b# (gensym "b") loc# (gensym "loc")]
     `(strategy [[~b# ~loc# :as state#] c#]
-       (let [~@(if-let [bs (:bindings-as options-map)] [bs b#])
-             ~@(if-let [locs (:loc-as options-map)] [locs loc#])
-             res# (m/match [((:zip-node ~b#) ~loc#)] ~@args)]
-         (combine res# state# #(c# %))))))
-
+       (let [res# (m/match ~(build-match-on-form (:match-on options-map) b# loc#)
+                    ~@args :else fail)]
+         (combine res# state# c#)))))
 
 (defmacro match-replace [& args]
-  (let [options-map (or (and (map? (first args)) (first args)) {})
-        args (if (map? (first args)) (rest args) args)
-        b# (gensym "b") loc# (gensym "loc")]
-    `(strategy [[~b# ~loc#] c#]
-       (let [~@(when-let [bs (:bindings-as options-map)] [bs b#])
-             ~@(when-let [locs (:loc-as options-map)] [locs loc#])]
-         (call c# (t/vector ~b# ((:zip-replace ~b#)
-                                 ~loc# (m/match [((:zip-node ~b#) ~loc#)]
-                                         ~@args))))))))
+  `(strategic-match
+    ~@(map (fn [i arg] (if (odd? i) `(replace (constantly ~arg)) arg))
+         (range) (if (map? (first args)) (rest args) args))))
 
-(defrecord Rule [lhspat rhspat f loc-as binding-as]
+(defrecord Rule [lhspat rhspat f options-map]
   IStrategy
   (combine [this state continuation]
     (.combine f state continuation))
@@ -406,74 +413,83 @@
   (invoke [this term zip] (.invoke f term zip))
   (applyTo [this arglist] (.applyTo f this arglist)))
 
-
-(defmacro rule
-  ([lhs -> rhs] `(rule {} ~lhs -> ~rhs))
+(defmacro strategic-rule
+  ([lhs -> rhs] `(strategic-rule {:match-on :node} ~lhs -> ~rhs))
   ([options-map lhs -> rhs]
    `(->Rule ~(list 'quote lhs) ~(list 'quote rhs)
-            (match-replace ~options-map ~[lhs]  ~rhs)
-            ~(list 'quote (:loc-as options-map))
-            ~(list 'quote (:bindings-as options-map)))))
+            (strategic-match ~options-map ~lhs  ~rhs)
+            options-map)))
+
+(defmacro defstrategic-rule [a & rest]
+  (let [[name args] (ctm/name-with-attributes a rest)]
+    `(def ~name (strategic-rule ~@args))))
+
+
+
+(defmacro rule
+  ([lhs -> rhs] `(rule {:match-on :node} ~lhs -> ~rhs))
+  ([options-map lhs -> rhs]
+   `(->Rule ~(list 'quote lhs) (replace (constantly ~rhs))
+            (match-replace ~options-map ~lhs  ~rhs)
+            ~options-map)))
 
 ;; TODO use tools.macro
 (defmacro defrule [a & rest]
   (let [[name args] (ctm/name-with-attributes a rest)]
     `(def ~name (rule ~@args))))
 
-(defmacro ruleset
-  "every arg should be either a (rule ...) form or a globally bound variable
-   to a rule. semantically equivalent to (apply <+ rules) but much more efficient."
+(defn build-rule
+  "builds rule from rule-form"
+  [rf]
+  (cond (and (sequential? rf)
+             (= #'stratege.core/strategic-rule (resolve (first rf))))
+        (condp = (count rf)
+          4 (->Rule (nth rf 1) (nth rf 3) nil {:match-on :node})
+          5 (->Rule (nth rf 2) (nth rf 4)
+                    {:loc-as (nth rf 1) :bindings-as (nth rf 1)}))
+        (and (sequential? rf)
+             (= #'stratege.core/rule (resolve (first rf))))
+        (condp = (count rf)
+          4 (->Rule (nth rf 1) `(replace (constantly ~(nth rf 3))) nil {:match-on :node})
+          5 (->Rule (nth rf 1) `(replace (constantly ~(nth rf 4)))
+                    {:loc-as (nth rf 1) :bindings-as (nth rf 1)}))
+        :else nil))
+
+;;to make rules work with the :match-on option, one has to
+;; 1. determine the superset of keys to match on from all the rules
+;;   - core.match is optimized enough to just match on all possible
+;;     combinations [:node :loc :bindings]
+;; 2. modify every lhs to be consistent with what is matched-on
+
+(defn build-rules-lhs
+  "builds the lhs of the match for the rule for the rules macro"
+  [rule]
+  (let [matched-on (:match-on (:options-map rule))
+        match-on-map (if (keyword? matched-on) {matched-on (:lhspat rule)}
+                         (zipmap matched-on (:lhspat rule)))
+        or-gensym (fn [f] (fn [v] (or (f v) (gensym (str f)))))]
+    ((juxt (or-gensym :node) (or-gensym :loc) (or-gensym :bindings)) match-on-map)))
+
+
+(defmacro rules
+  "every arg should be either a (rule ...) or (strategic-rule ...)
+  form or a globally bound variable to a rule. WARNING: Does not
+  backtrack when application of one rhs fails, use (<+ (strategic-rule ..)
+  (rule ....) ...) instead."
   [& rules]
   (let [rules (->> rules
-                   (map #(if (and (sequential? %)
-                                  (= #'stratege.core/rule (resolve (first %))))
-                           (condp = (count %)
-                             4 (->Rule (nth % 1) (nth % 3) nil nil nil)
-                             5 (->Rule (nth % 2) (nth % 4)
-                                       (:loc-as (nth % 1)) (:bindings-as (nth % 1))))))
-                   (map #(or (when-let [var (and (symbol? %) (resolve %))]
-                               (var-get var)) %)))]
-    `(strategy [[b# loc#] c#]
-       (as-> (m/match [((:zip-node b#) loc#) loc# b#]
-                      ~@(interleave
-                         (map (juxt :lhspat #(or (:loc-as %) (gensym "loc"))
-                                    #(or (:bindings-as %) (gensym "bindings"))) rules)
-                         (map :rhspat rules))
-                      :else nil) x#
-         (call c# (and x# (t/vector b# ((:zip-replace b#) loc# x#))))))))
-
-(defmacro strategic-rule
-  ([lhs -> rhs] `(strategic-rule {} ~lhs -> ~rhs))
-  ([options-map lhs -> rhs]
-   `(->Rule ~(list 'quote lhs) ~(list 'quote rhs)
-            (strategic-match ~options-map ~[lhs]  ~rhs)
-            ~(list 'quote (:loc-as options-map))
-            ~(list 'quote (:bindings-as options-map)))))
-
-(defmacro defstrategic-rule [a & rest]
-  (let [[name args] (ctm/name-with-attributes a rest)]
-    `(def ~name (strategic-rule ~@args))))
-
-(defmacro strategic-ruleset
-  "every arg should be either a (rule ...) form or a globally bound variable
-   to a rule. semantically equivalent to (apply <+ rules) but much more efficient."
-  [& rules]
-  (let [rules (->> rules
-                   (map #(if (and (sequential? %)
-                                  (= #'stratege.core/rule (resolve (first %))))
-                           (condp = (count %)
-                             4 (->Rule (nth % 1) (nth % 3) nil nil nil)
-                             5 (->Rule (nth % 2) (nth % 4)
-                                       (:loc-as (nth % 1)) (:bindings-as (nth % 1))))))
+                   (map build-rule)
                    (map #(or (when-let [var (and (symbol? %) (resolve %))]
                                (var-get var)) %)))]
     `(strategy [[b# loc# :as state#] c#]
        (combine (m/match [((:zip-node b#) loc#) loc# b#]
-                      ~@(interleave
-                         (map (juxt :lhspat #(or (:loc-as %) (gensym "loc"))
-                                    #(or (:bindings-as %) (gensym "bindings"))) rules)
-                         (map :rhspat rules))
-                      :else fail) state# #(c# %)))))
+                  ~@(interleave
+                     (map build-rules-lhs rules)
+                     (map :rhspat rules))
+                  :else fail) state# c#))))
+
+
+
 
 ;; Local Variables:
 ;; eval: (put-clojure-indent 'let-cps 1)
