@@ -1,0 +1,11 @@
+* rewriting
+  Strategy based term rewriting library for clojure.
+ 
+  Based on the following ideas:
+  - operate on terms through zippers
+  - separate rules from strategies
+  - provide strategy combinators
+  - strategies are written in a cps style so that they don't blow up the stack
+
+* usage
+  

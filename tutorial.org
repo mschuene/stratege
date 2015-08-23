@@ -1,0 +1,26 @@
+#+TITLE: Stratege Tutorial
+#+AUTHOR: Maik Schünemann
+#+email: maikschuenemann@gmail.com
+#+DESCRIPTION: 
+#+KEYWORDS: 
+#+LANGUAGE:  de
+#+OPTIONS:   H:3 num:t toc:t :nil @:t ::t |:t ^:t -:t f:t *:t <:t
+#+OPTIONS:   TeX:t LaTeX:t skip:nil d:nil todo:t pri:nil tags:not-in-toc
+#+INFOJS_OPT: view:nil toc:nil ltoc:t mouse:underline buttons:0 path:http://orgmode.org/org-info.js
+#+EXPORT_SELECT_TAGS: export
+#+EXPORT_EXCLUDE_TAGS: noexport
+#+LINK_UP:   
+#+LINK_HOME:
+#+TAGS:  BlowerDoor(b) Suub(s) Uni(u) Home(h) Task(t) Note(n) Info(i)
+#+TAGS: Changed(c) Project(p) Reading(r) Hobby(f) OpenSource(o) Meta(m)
+#+SEQ_TODO: TODO(t) STARTED(s) WAITING(w) APPT(a) NEXT(n) | DONE(d) CANCELLED(c) DEFERRED(f) 
+#+STARTUP:showall
+#+LaTeX_CLASS: uni
+
+* Introduction
+
+  Stratege is a strategic term rewriting system for clojure. It is inspired by the Stratego/XT system.
+  This tutorial is an ported excerpt from the Chapters 12 to 18 of the StrategoXT Manual.
+
+
+  
