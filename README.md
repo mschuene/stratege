@@ -110,53 +110,53 @@ about rule application. In the case of propagate-constants-rules, a single botto
 
 The following is a list of the strategies provided by stratege.
 
-## higher level traversal strategies
+### higher level traversal strategies
 
-# bottomup
+#### bottomup
 
-# topdown
+#### topdown
 
-# downup
+#### downup
 
-# downup2
+#### downup2
 
-# leavestd and leavesbu
+#### leavestd and leavesbu
 
-# onebu and onetd
+#### onebu and onetd
 
-# somebu and sometd
+#### somebu and sometd
 
-# innermost
+#### innermost
 
-## Core strategies and strategy transformations
+### Core strategies and strategy transformations
 
-# id
+#### id
 
-# fail
+#### fail
 
-# <+
+#### <+
 
-# <*
+#### <*
 
-# all, some and one
+#### all, some and one
 
-# attempt
+#### attempt
 
-# repeat
+#### repeat
 
-# on-node and on-local
+#### on-node and on-local
 
-# replace
+#### replace
 
-# where and guard
+#### where and guard
 
-# scope
+#### scope
 
-# emit-bindings
+#### emit-bindings
 
-# debug
+#### debug
 
-# strategic-match and match-replace
+#### strategic-match and match-replace
 
-# strategic-rule and rule
+#### strategic-rule and rule
 
