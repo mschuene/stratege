@@ -75,13 +75,12 @@ A rule can be called as a function or combined with other rules in a
 (is (= (defi [:impl :x :y]) [:or [:not :x] :y]))
 ```
 
-In a
-(rules ...) form all arguments must be either calls to the rule (or
-strategic-rule explained later) macro or vars pointing to a defined
-rule. All the rules in a (rules ...) form are compiled to a
-clojure.core.match/match call. This way, the matching rule can be
-determined by a single sweep through the expression instead of a sweep
-per rule.
+In a (rules ...) form all arguments must be either calls to the rule
+(or strategic-rule explained in the section matching and rules in
+depth) macro or vars pointing to a defined rule. All the rules in a
+(rules ...) form are compiled to a clojure.core.match/match call. This
+way, the matching rule can be determined by a single sweep through the
+expression instead of a sweep per rule.
 
 If you don't want to name the rules and reuse them elsewhere, then the
 match-replace macro provides a more direct resemblance to the pattern
@@ -130,6 +129,7 @@ or nil when they failed, internally the strategies get and return a
 pair of
 - a binding map and
 - the current zipper location.
+Such a pair is called state in the following.
 
 The bindings map provides means of passing along information during
 the traversal, for example defined variables when doing contextual
@@ -149,54 +149,309 @@ passing style, which allows recursive strategy definitions without
 risking stack overflow on big terms. This enables the use of core strategy
 combinators to define high level strategies like bottomup etc.
 
+#### Calling strategies as functions
 
-### higher level traversal strategies
+Strategies are implemented as a custom type that has a combine method
+for calling in cps style for internal use and also implements IFn for
+easier invokation by client code.
 
-#### bottomup
+When you invoke a strategy as a function, it takes a term and returns
+the modified term or nil in case of failure.
 
-#### topdown
+You can specify on optional second argument, that indicates the
+starting bindings. For example, you can tell the strategy to use the
+seq-zip instead of the default vector-zip by calling it with
 
-#### downup
-
-#### downup2
-
-#### leavestd and leavesbu
-
-#### onebu and onetd
-
-#### somebu and sometd
-
-#### innermost
+```clojure
+(s term {:zip-make-zip zip/seq-zip})
+```
 
 ### Core strategies and strategy transformations
 
 #### id
 
+The id strategy always succeeds and returns the given bindings and location.
+
 #### fail
+
+The fail strategy always fails and constantly returns nil.
 
 #### <+
 
+<+ is the deterministic choice strategy combinator (<+ s1 .... sn)
+tries to apply s1 and succeeds with the returned state from s1 if it
+succeeds. If s1 fails, it tries to apply s2 .... until sn. It fails if
+all strategies failed.
+
 #### <*
 
-#### all, some and one
+<* is the sequential composition of strategies. (<* s1 .. sn) tries to
+apply first s1 and if it succeeds, applies s2 with the state returned
+by s1 and so on until sn succeeds and returns its resulting state.
+If any of s1 ... sn fails, <* fails.
 
 #### attempt
 
+The attempt strategy combinator tries to apply the given strategy,
+returns its resulting state if it succeeds, but returnes the
+unmodified initial state if the strategy fails.
+
+```clojure
+(defn attempt [s] (<+ s id))
+```
 #### repeat
 
-#### on-node and on-local
+Repeat is the first example of a recursive strategy combinator. It
+applies the given strategy exhaustively until it fails, returning the
+resulting state from the last successful application.
+
+```clojure
+(defn repeat [s] (attempt (<* s (rec repeat s))))
+```
+
+rec is a utility function to make recursive strategy definitions more
+succinct. It creates an anonymous strategy that applies the given
+strategy to the given terms when its called.
+
+#### all, some and one
+
+To be able to define strategies that act upon subterms, the all, some
+and one combinators can be used.
+
+(all s) applies s to all subterms left to right passing the created
+bindings and succeeds when s succeeded on all subterms. Fails if one
+application of s fails. Acts like id on leaves.
+
+(one s) and (some s) try to apply the given stratego to one or to at
+most subterms as possible. Both fail when no application of s failed
+or when the current location is a leave.
+
+### higher level traversal strategies
+
+With the strategy combinators introduced so far, the more usual
+traversal strategies can be explained.
+
+#### bottomup
+
+The bottomup strategy combinator applies s in a bottom up fashion,
+starting with the leaves. Succeeds if and only if all applications of
+s succeeded.
+
+```clojure
+(defn bottomup [s] (<* (all (rec bottomup s)) s))
+```
+
+#### topdown
+
+The topdown strategy combinator applies s in a top down
+fashing, starting with the current loc and working its way down to the
+leaves. Succeeds iff all applications of s succeeded.
+
+```clojure
+(defn topdown [s] (<* s (all (rec topdown s))))
+```
+
+#### downup and downup2
+
+The downup strategy combinator applies s on the descend as well as on
+the ascend. Succeeds iff all applications of s succeeded.
+
+```clojure
+(defn downup [s] (<* s (all (rec downup s)) s))
+```
+
+downup2 is like downup but applies s1 on the descend and s2 on the ascend.
+
+#### onebu and onetd
+
+The onebu and onetd combinators are versions of the bottomup and
+topdown combinators that use one instead of all, therefore trying to
+apply the strategy to one subterm in a bottomup or topdown manner.
+
+```clojure
+(defn onebu [s] (<+ (one (rec onebu s)) s))
+(defn onetd [s] (<+ s (one (rec onetd s))))
+```
+#### somebu and sometd
+
+The somebu and sometd combinators are versions of the bottomup and
+topdown combinators that use some instead of all, therefore trying to
+apply the strategy to at most subterms as possible in a bottomup or
+topdown manner.
+
+```clojure
+(defn somebu [s] (<+ (some (rec somebu s)) s))
+(defn sometd [s] (<+ s (some (rec sometd s))))
+```
+
+#### innermost
+
+The innermost strategy combinator applies s repeatedly bottomup until
+it can't be applied anymore.
+
+```clojure
+(defn innermost [s] (bottomup (attempt (<* s (rec innermost s)))))
+```
+
+#### leaves
+
+The leaves strategy combinator acts like bottomup but only applies s then the current location is a leave.
+
+
+
+### Other strategy combinators
+
+#### where
+
+where applies s, but restores the original location when s succeeds
+but keeps the bindings made by s.
+
+#### on-node and on-loc
+
+on-node and on-loc are helpers to define strategies, from non cps
+functions operating on a pair of [bindings node] or
+[bindings location] respectively.
 
 #### replace
 
-#### where and guard
+replace turns a function operating on the current node to a strategy
+that performs this operation and replaces the current location with
+the return value of the function. Thus
+
+```clojure
+((bottomup (attempt (replace {1 2}))) term)
+```
+
+is equivalent to using clojure.walk/postwalk-replace (when the zipper
+used is appropriate).
+
+### guard
+
+guard only applies the strategy when the current node matches the
+given predicate?.
+
+```clojure
+(defn guard [predicate? s] (<* (where (replace predicate?)) s))
+```
 
 #### scope
 
+The (scope vars s) combinator limits the scope of the given vars to
+the application of s,
+
+
 #### emit-bindings
+
+emit-bindings replaces the current node by [current-bindings current-node].
+Useful when you want to retain the bindings after the strategy is invoked.
+
+### put-bindings and update-bindings
+
+```clojure
+(put-bindings new-bindings)
+```
+
+put-bindings merges the new-bindings to the binding map. Always
+succeeds. As does a update-bindings but it calls update on the binding
+map with the given arguments.
 
 #### debug
 
+debug is an utility to debug the transformation process going on.
+It always succeeds and does nothing to the state.
+It takes either a single no-arg function that is called, or a vector indicating
+the arguments to the function and a function taking the specified arguments.
+Possible values in the vector are :node :loc or :bindings.
+
+For example:
+
+```clojure
+((bottomup (debug [:node] prn)) [[2 3] 1])
+```
+
+prints
+
+```clojure
+2
+3
+[2 3]
+1
+[[2 3] 1]
+[[2 3] 1]
+```
+### Matching and rules in depth
+
+The beginning of this introduction gave examples of the rule, rules
+and match-replace form. These examples are showing the special case
+where after the successful match of left hand side, the current
+location is replaced by the instantiation of the right hand side.
+
+The general case allows you to specify the strategy executed after
+successful match of the left hand side. The special case then comes down to
+using (replace (constantly rhs)) as next strategy.
+
 #### strategic-match and match-replace
+
+match replace is the special case of strategic-match where the right
+hand sides are wrapped in (replace (constantly rhs)).
+
+```clojure
+(strategic-match [:let x = expr in y] (update-bindings :declared-vars conj x))
+```
+
+Both match-replace and strategic-match
+take an options-map as first . Currently, only the
+option :match-on is supported. Its default value is :node which means
+that the match is performed on the current node. Possible values are
+:node, :loc, :bindings or a vector of these keywords. For example with
+
+
+```clojure
+(strategic-match {:match-on [:node :bindings :loc]}
+    [node-pattern bindings-pattern loc-pattern])
+```
+
+you can match simultaneously on the current node, the current bindings
+and bind the current location so you can inspect the context in a
+:guard clause or in the right hand side.
+
+One thing to notice is that the matching is committed, once the left
+hand side matches. When the application of the right hand side
+strategy fails, other possible matches aren't considered.
+
+Thus, while (match-replace lhs1 rhs1 lhs2 rhs2) is equivalent to, but
+more performant as, (<+ (match-replace lhs1 rhs1) (match-replace lhs2
+rhs2)), this does not hold for strategic-match in case that the
+strategies on the right hand side don't always succeed.
 
 #### strategic-rule and rule
 
+strategic-rule and rule have exactly the same relations as
+strategic-match and match-replace. Both also take as optional first
+argument an options-map with the same supported keys and rule is the
+special case of strategic rule with wrapping the right hand side in
+(replace (constantly rhs)).
+
+The rules form accepts both rules and strategic-rules and the rules
+can have different :match-on options.
+
+This way you can have most of your rules context-free and matching
+only on :node and the few rules that need it have access to the
+bindings or location or can have a strategy as right hand side.
+
+
+### Other strategy combinators
+
+There are other strategy combinators that are not mentioned in this
+overview. Check the stratege.core namespace for them. 
+
+### StrategoXT manual
+
+The
+[StrategoXT Manual](http://releases.strategoxt.org/strategoxt-manual/unstable/manual/chunk-book/index.html)
+gives a nice introduction to strategic term rewriting and most of the
+examples given in Chapters 12-17 can easily be translated to stratege.
+The beginning example is a direct translation from an example in the
+manual. It also discusses some topics addressed here in greater depth
+and I would suggest you to look into it if you are interested in
+strategic term rewriting and part of the rationale behind stratege.

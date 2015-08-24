@@ -217,21 +217,13 @@
   [s]
   (<* (all (rec bottomup s)) s))
 
-(defn leavesbu
+(defn leaves
   "like bottomup but only applies s when location is a leaf"
   [s]
   (bottomup (strategy [[b loc :as state] c]
               (if ((:zip-branch? b) loc)
                 (call c state)
                 (combine s state c)))))
-
-(defn leavestd
-  "like topdown but only applies s when location is a leaf"
-  [s]
-  (topdown (strategy [[b loc :as state] c]
-             (if ((:zip-branch? b) loc)
-               (call c state)
-               (combine s state c)))))
 
 (defn downup
   "applies s then descends and applies s again"
@@ -269,7 +261,7 @@
   (<+ s (some (rec sometd s))))
 
 (defn innermost
-  "applies s repeatedly bottomup until normal form is reached"
+  "applies s repeatedly bottomup until it can't be applied any more"
   [s]
   (bottomup (attempt (<* s (rec innermost s)))))
 
@@ -363,7 +355,7 @@
 
 (defn debug
   "args is a vector indicating how f should be called. supported are
-  keys :loc :node :bindings :state. Always succeeds. Example usage:
+  keys :loc :node :bindings. Always succeeds. Example usage:
   (debug [:node] prn)"
   ([f] (replace #(do (f) %)))
   ([args f]
@@ -372,7 +364,6 @@
                       :loc loc
                       :node ((:zip-node b) loc)
                       :bindings b
-                      :state state
                       nil) args))
      (call c state))))
 
