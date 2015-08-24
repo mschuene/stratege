@@ -296,6 +296,11 @@
   [new-bindings]
   (on-node (fn [[b t]] (t/vector (merge b new-bindings) t))))
 
+(defn update-bindings
+  "updates the current binding map with the given aguments"
+  [& update-args]
+  (on-node (fn [[b t]] (t/vector (apply update b update-args) t))))
+
 (defn ?
   "if var-or-value is a symbol strating with ?, the current term is
   checked with the current binding associated to that symbol. If it is
@@ -382,6 +387,7 @@
 
 (defmacro strategic-match
   "matches on the current term, right hand sides are strategies.
+   Matching is performed with core.match.
    First argument can be an option-map. Currently supported options are:
    :match-on - specifies on what the match call is made. Possible values are
    :node :loc :bindings :state or a vector containing this keys like [:node :bindings :loc].
@@ -395,7 +401,12 @@
                     ~@args :else fail)]
          (combine res# state# c#)))))
 
-(defmacro match-replace [& args]
+(defmacro match-replace
+  "matches on the current term and replaces it by an instantiation of the right hand side.
+   Matching is performed with core.match. Special case of
+   strategic-match where all right hand sides are wrapped in (replace (constantly rhs)).
+   Accepts an option map as optional first argument. See strategic-match for details."
+  [& args]
   `(strategic-match
     ~@(map (fn [i arg] (if (odd? i) `(replace (constantly ~arg)) arg))
          (range) (if (map? (first args)) (rest args) args))))
@@ -410,6 +421,9 @@
   (applyTo [this arglist] (.applyTo f this arglist)))
 
 (defmacro strategic-rule
+  "a rule where the right hand side is a strategy, which will be
+  applied next if the lhs matched. Accepts an option map as optional
+  first argument. See strategic-match for details."
   ([lhs -> rhs] `(strategic-rule {:match-on :node} ~lhs -> ~rhs))
   ([options-map lhs -> rhs]
    `(->Rule ~(list 'quote lhs) ~(list 'quote rhs)
@@ -421,13 +435,15 @@
     `(def ~name (strategic-rule ~@args))))
 
 (defmacro rule
+  "a rule that replaces the current term with the rhs on successful
+  match. Accepts an option map as optional first argument. See
+  strategic-match for details."
   ([lhs -> rhs] `(rule {:match-on :node} ~lhs -> ~rhs))
   ([options-map lhs -> rhs]
    `(->Rule ~(list 'quote lhs) ~(list 'quote `(replace (constantly ~rhs)))
             (match-replace ~options-map ~lhs  ~rhs)
             ~options-map)))
 
-;; TODO use tools.macro
 (defmacro defrule [name & rest]
   (let [[name args] (ctm/name-with-attributes name rest)]
     `(def ~name (rule ~@args))))

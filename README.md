@@ -33,28 +33,29 @@ A clojure library for strategic term rewriting.
 ### Rationale
 
 Many data transformations can be expressed by term rewriting in a
-natural way. There are already great libraries for matrix programming,
-logic programming, async programming, etc. for clojure but term
+natural way. There are already great clojure libraries for matrix
+programming, logic programming, async programming, etc. but term
 rewriting seems to be a gap in the clojure ecosystem.
 
-There are some libraries like kibit, termito and expresso which define
-a term rewriting system, but on top of core.logic and they are prone
-to stack overflows on deeply nested terms. Indeed, part of my
-motivation to write stratege stem from the desire to have a better
-core term rewriting system for expresso.
+There are already libraries like kibit, termito and expresso which
+define a term rewriting system, but they do that on top of core.logic
+and are prone to stack overflows on deeply nested terms. Indeed,
+part of my motivation to write stratege stems from the desire to have a
+better core term rewriting system and rewrite expresso to use it.
 
 Stratege is based on the following key ideas:
-- operate on terms through zippers.
-- separate rules from strategies and expose composeable strategy combinators to define
+- Operate on terms through zippers.
+- Separate rules from strategies and expose composeable strategy combinators to define
   the traversals like StrategoXT does.
-- strategies are internally written in a continuation passing style so that they don't
+- Strategies are internally written in a continuation passing style so that they don't
   blow up the stack.
-- use core.match for rule definitions.
+- core.match is used for rule definitions.
 
 
 ### Getting started
 
-Add the following line to your leiningen dependencies: (not jet released!)
+Add the following line to your leiningen dependencies:
+
 ```clojure
 [stratege "0.1.0"]
 ```
@@ -64,9 +65,9 @@ Add the following line to your leiningen dependencies: (not jet released!)
 In the example given above, rules are constructed and given a name
 with the defrule macro from stratege.core. (defrule name rule-args) is
 just a shortcut for (def name (rule rule-args)). In the simple case,
-rule takes 3 arguments, the left-hand-side pattern, some thing in the
-middle, and the right-hand-side pattern and acts on the current node.
-The patterns use normal core.match syntax.
+rule takes 3 arguments, the left-hand-side pattern, the ->, and the
+right-hand-side pattern and acts on the current node. The patterns use
+normal core.match syntax.
 
 A rule can be called as a function or combined with other rules in a
 (rules ...) form.
@@ -75,12 +76,12 @@ A rule can be called as a function or combined with other rules in a
 (is (= (defi [:impl :x :y]) [:or [:not :x] :y]))
 ```
 
-In a (rules ...) form all arguments must be either calls to the rule
-(or strategic-rule explained in the section matching and rules in
-depth) macro or vars pointing to a defined rule. All the rules in a
-(rules ...) form are compiled to a clojure.core.match/match call. This
-way, the matching rule can be determined by a single sweep through the
-expression instead of a sweep per rule.
+In a (rules ...) form, all arguments must be either calls to the rule
+macro (or strategic-rule macro explained in the section matching and
+rules in depth) or vars pointing to a defined rule. All the rules in a
+(rules ...) form are compiled to a single clojure.core.match/match
+call. This way, the matching rule can be determined by a single sweep
+through the expression instead of a sweep per rule.
 
 If you don't want to name the rules and reuse them elsewhere, then the
 match-replace macro provides a more direct resemblance to the pattern
@@ -109,7 +110,7 @@ is walked and where and how often the rules are applied.
 
 One example of a strategy is the innermost strategy used in the first
 example. It exhaustively applies the given strategy in a bottomup
-fashion until a normal form is reached.
+fashion until a it can't be applied anymore.
 
 Innermost application is sometimes too much. Part of the rationale of
 using strategies and strategy combinators is having finer control
@@ -129,7 +130,7 @@ or nil when they failed, internally the strategies get and return a
 pair of
 - a binding map and
 - the current zipper location.
-Such a pair is called state in the following.
+Such a pair is called state in the remainder of this overview.
 
 The bindings map provides means of passing along information during
 the traversal, for example defined variables when doing contextual
@@ -152,7 +153,7 @@ combinators to define high level strategies like bottomup etc.
 #### Calling strategies as functions
 
 Strategies are implemented as a custom type that has a combine method
-for calling in cps style for internal use and also implements IFn for
+with the cps interface for internal use and also implements IFn for
 easier invokation by client code.
 
 When you invoke a strategy as a function, it takes a term and returns
@@ -201,7 +202,7 @@ unmodified initial state if the strategy fails.
 ```
 #### repeat
 
-Repeat is the first example of a recursive strategy combinator. It
+repeat is the first example of a recursive strategy combinator. It
 applies the given strategy exhaustively until it fails, returning the
 resulting state from the last successful application.
 
@@ -296,9 +297,8 @@ it can't be applied anymore.
 
 #### leaves
 
-The leaves strategy combinator acts like bottomup but only applies s then the current location is a leave.
-
-
+The leaves strategy combinator acts like bottomup but only applies s
+when the current location is a leave.
 
 ### Other strategy combinators
 
@@ -309,7 +309,7 @@ but keeps the bindings made by s.
 
 #### on-node and on-loc
 
-on-node and on-loc are helpers to define strategies, from non cps
+on-node and on-loc are helpers to define strategies from non cps
 functions operating on a pair of [bindings node] or
 [bindings location] respectively.
 
@@ -323,7 +323,7 @@ the return value of the function. Thus
 ((bottomup (attempt (replace {1 2}))) term)
 ```
 
-is equivalent to using clojure.walk/postwalk-replace (when the zipper
+is equivalent to using (clojure.walk/postwalk-replace {1 2} term) (when the zipper
 used is appropriate).
 
 ### guard
@@ -338,13 +338,17 @@ given predicate?.
 #### scope
 
 The (scope vars s) combinator limits the scope of the given vars to
-the application of s,
+the application of s, restoring the original vals for the vars after s
+succeeded.
 
 
 #### emit-bindings
 
-emit-bindings replaces the current node by [current-bindings current-node].
-Useful when you want to retain the bindings after the strategy is invoked.
+(emit-bindings) replaces the current node by
+[current-bindings current-node]. Useful when you want to retain the
+bindings from one strategy invoked as a function. Takes an optional
+vector of keys as argument and limits the exposed bindings to these
+specified in the vector.
 
 ### put-bindings and update-bindings
 
@@ -383,45 +387,45 @@ prints
 ### Matching and rules in depth
 
 The beginning of this introduction gave examples of the rule, rules
-and match-replace form. These examples are showing the special case
-where after the successful match of left hand side, the current
-location is replaced by the instantiation of the right hand side.
+and match-replace macros. These examples are showing the special case
+where the current location is replaced by the instantiation of the
+right hand side after the successful match of left hand side.
 
-The general case allows you to specify the strategy executed after
-successful match of the left hand side. The special case then comes down to
+The general case allows you to specify the strategy executed after the left hand side has successfully been matched. The special case then comes down to
 using (replace (constantly rhs)) as next strategy.
 
 #### strategic-match and match-replace
 
 match replace is the special case of strategic-match where the right
-hand sides are wrapped in (replace (constantly rhs)).
+hand sides are wrapped in (replace (constantly rhs)). For example, you can use
+strategic-match to put bindings in the binding map.
 
 ```clojure
 (strategic-match [:let x = expr in y] (update-bindings :declared-vars conj x))
 ```
 
 Both match-replace and strategic-match
-take an options-map as first . Currently, only the
-option :match-on is supported. Its default value is :node which means
+take an options-map as an optional first argument. Currently, only the
+option :match-on is supported. It's default value is :node which means
 that the match is performed on the current node. Possible values are
 :node, :loc, :bindings or a vector of these keywords. For example with
 
 
 ```clojure
 (strategic-match {:match-on [:node :bindings :loc]}
-    [node-pattern bindings-pattern loc-pattern])
+    [node-pattern bindings-pattern loc-pattern] rhs-strategy)
 ```
 
 you can match simultaneously on the current node, the current bindings
 and bind the current location so you can inspect the context in a
 :guard clause or in the right hand side.
 
-One thing to notice is that the matching is committed, once the left
+One thing to notice is that the match is committed, once the left
 hand side matches. When the application of the right hand side
 strategy fails, other possible matches aren't considered.
 
 Thus, while (match-replace lhs1 rhs1 lhs2 rhs2) is equivalent to, but
-more performant as, (<+ (match-replace lhs1 rhs1) (match-replace lhs2
+more performant as (<+ (match-replace lhs1 rhs1) (match-replace lhs2
 rhs2)), this does not hold for strategic-match in case that the
 strategies on the right hand side don't always succeed.
 
@@ -434,11 +438,10 @@ special case of strategic rule with wrapping the right hand side in
 (replace (constantly rhs)).
 
 The rules form accepts both rules and strategic-rules and the rules
-can have different :match-on options.
-
-This way you can have most of your rules context-free and matching
-only on :node and the few rules that need it have access to the
-bindings or location or can have a strategy as right hand side.
+can have different :match-on options.This way you can have most of
+your rules context-free and matching only on :node and only the few
+rules that need it have access to the bindings or location or can have
+a strategy as right hand side.
 
 
 ### Other strategy combinators
@@ -452,10 +455,10 @@ The
 [StrategoXT Manual](http://releases.strategoxt.org/strategoxt-manual/unstable/manual/chunk-book/index.html)
 gives a nice introduction to strategic term rewriting and most of the
 examples given in Chapters 12-17 can easily be translated to stratege.
-The beginning example is a direct translation from an example in the
-manual. It also discusses some topics addressed here in greater depth
-and I would suggest you to look into it if you are interested in
-strategic term rewriting and part of the rationale behind stratege.
+The beginning example is a direct translation from an example in
+section 13.5.1 of the manual. The manual also discusses some topics
+addressed here in greater depth and I would suggest you to look into
+it if you are interested in strategic term rewriting.
 
 the ; in stratego corresponds to stratege's <* and try has been
 renamed to attempt, the ? in stratego is more powerful than the ? in
