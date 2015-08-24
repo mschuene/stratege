@@ -1,6 +1,6 @@
 (ns stratege.core
   "strategy combinators for term rewriting over zippers"
-  (:refer-clojure :exclude [some replace repeat])
+  (:refer-clojure :exclude [some replace repeat attempt])
   (:require [clj-tuple :as t]
             [clojure.core.match :as m]
             [clojure.set :as set]
@@ -19,7 +19,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Apply Strategy to term
 
-
 ;; stratege works by design on zippers. Because the choice of the
 ;; zipper can be different depending on the application, the zipper
 ;; functions are stored in the default binding-map. der default, the
@@ -31,9 +30,12 @@
   (map->ZipperImpl {:zip-up zip/up
                     :zip-down zip/down
                     :zip-node zip/node
+                    :zip-next zip/next
                     :zip-right zip/right
                     :zip-make-node zip/make-node
+                    :zip-end? zip/end?
                     :zip-root zip/root
+                    :zip-branch? zip/branch?
                     :zip-replace zip/replace
                     :zip-make-zip zip/vector-zip}))
 
@@ -47,7 +49,6 @@
      (when-let [res (trampoline
                      strategy (t/vector bindings ((:zip-make-zip bindings) term)) identity)]
        (-> res second zip/root)))))
-
 
 ;; it is convenient if one can see a strategy as simply a function
 ;; from term to term or nil for the external api while still having
@@ -72,7 +73,6 @@
   [arg-vector & body]
   `(Strategy. (fn ~arg-vector ~@body)))  
 
-
 ;;;;;;; base strategies ;;;;;;;;
 
 (def id
@@ -85,7 +85,6 @@
   "fail strategy, always returns nil"
   (strategy [state k]
     (call k nil)))
-
 
 ;;;;;;; strategy combinators ;;;;;;;;
 
@@ -104,7 +103,6 @@
            (call k nil)))) ;;short circuiting :)
      state strategies k)))
 
-
 (defn <+
   "deterministic choice between strategies tries the strategies in
   order. Succeeds if one on them succeeds and fails otherwise"
@@ -118,7 +116,6 @@
            (call c state))))
      state strategies (constantly (call k nil)))))
 
-
 (defn negation
   "acts like id s fails or fail if s succeeds."
   [s]
@@ -126,13 +123,12 @@
     (let-cps [nstate (s state)]
       (call k (if nstate nil state)))))
 
-(defmacro rec
+(defn rec
   "to succinctly write recursive strategies using strategy
   combinators"
-  [& args]
-  `(strategy [state# c#] 
-     (combine (~@args) state# c#)))
-
+  [s & args]
+  (strategy [state c] 
+     (combine (apply s args) state c)))
 
 ;; movement functions
 
@@ -148,7 +144,6 @@
 (def zip-right (zip-op :zip-right))
 
 (def zip-left (zip-op :zip-left))
-
 
 (defn all
   "applies strategy s to all childrens of the current loc.
@@ -200,8 +195,6 @@
         (some-step (t/vector b leftmost-child) false))
       (call k nil))))
 
-
-
 ;; traversal strategies
 
 (defn attempt
@@ -223,6 +216,22 @@
   "applies s in a bottom up fashon on the given term"
   [s]
   (<* (all (rec bottomup s)) s))
+
+(defn leavesbu
+  "like bottomup but only applies s when location is a leaf"
+  [s]
+  (bottomup (strategy [[b loc :as state] c]
+              (if ((:zip-branch? b) loc)
+                (call c state)
+                (combine s state c)))))
+
+(defn leavestd
+  "like topdown but only applies s when location is a leaf"
+  [s]
+  (topdown (strategy [[b loc :as state] c]
+             (if ((:zip-branch? b) loc)
+               (call c state)
+               (combine s state c)))))
 
 (defn downup
   "applies s then descends and applies s again"
@@ -249,18 +258,15 @@
   [s]
   (<+ s (all (rec alltd s))))
 
-
 (defn onetd
   "apply s to top level and if it fails on the level deeper"
   [s]
   (<+ s (one (rec onetd s))))
 
-
 (defn sometd
   "apply s to top level and if it fails on the level deeper"
   [s]
   (<+ s (some (rec sometd s))))
-
 
 (defn innermost
   "applies s repeatedly bottomup until normal form is reached"
@@ -268,13 +274,18 @@
   (bottomup (attempt (<* s (rec innermost s)))))
 
 (defn on-node
-  "applies f with [bindings (zip/node loc)] and replaces loc after f
+  "applies f with [bindings (zip/node loc)] and replaces loc and bindings if f
   succeeded."
   [f]
   (strategy [[b loc] c]
     (c (when-let [[nb nt] (f (t/vector b ((:zip-node b) loc)))]
          (t/vector nb ((:zip-replace b) loc nt))))))
 
+(defn on-loc
+  "applies f with [bindings loc] and sets returned bindings and locatiion"
+  [f]
+  (strategy [state c]
+    (c (when-let [nstate (f state)] nstate))))
 
 (defn replace
   "a replace strategy operates on a node and neither uses nor create new bindings.
@@ -287,7 +298,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Match Build and Variable Binding
-
 
 (defn put-bindings
   "merges the current binding map with the new bindings"
@@ -308,7 +318,6 @@
                  (t/vector (assoc b var-or-value t) t))))
     (on-node (fn [[b t :as state]] (and (= t var-or-value) state)))))
 
-
 (defn !
   "replaces the subject term with the instantiation of the pattern t
   using the current bindings of terms to variables in t. Only one
@@ -319,7 +328,6 @@
      (strategy [[b loc] c]
        (call c (t/vector b ((bottomup (replace #(get b %))) to-build))))
      (on-node (fn [[b t]] (t/vector b ((bottomup (attempt (replace #(get b %)))) to-build)))))))
-
 
 (defn scope
   "the scope operator limits the scope of the vars to the application
@@ -332,7 +340,6 @@
         (let-cps [nstate (s (t/vector (apply dissoc b vars) t))]
           (call k (when-let [[b2 nt] nstate]
                     (t/vector (reduce dissoc (merge b2 old-bindings) not-set) nt))))))))
-
 
 (defn where
   "applies s to the subject term. if it succeeds, restores the
@@ -349,12 +356,10 @@
   [predicate? strategy]
   (<* (where (replace predicate?)) strategy))
 
-
 (defn emit-bindings
   "replaces current node with [current-bindings node]"
   ([] (on-node (fn [[b t]] (t/vector b (t/vector b t)))))
   ([vars] (on-node (fn [[b t]] (t/vector b (t/vector (select-keys b vars) t))))))
-
 
 (defn debug
   "args is a vector indicating how f should be called. supported are
@@ -424,18 +429,16 @@
   (let [[name args] (ctm/name-with-attributes a rest)]
     `(def ~name (strategic-rule ~@args))))
 
-
-
 (defmacro rule
   ([lhs -> rhs] `(rule {:match-on :node} ~lhs -> ~rhs))
   ([options-map lhs -> rhs]
-   `(->Rule ~(list 'quote lhs) (replace (constantly ~rhs))
+   `(->Rule ~(list 'quote lhs) ~(list 'quote `(replace (constantly ~rhs)))
             (match-replace ~options-map ~lhs  ~rhs)
             ~options-map)))
 
 ;; TODO use tools.macro
-(defmacro defrule [a & rest]
-  (let [[name args] (ctm/name-with-attributes a rest)]
+(defmacro defrule [name & rest]
+  (let [[name args] (ctm/name-with-attributes name rest)]
     `(def ~name (rule ~@args))))
 
 (defn build-rule
@@ -453,7 +456,7 @@
           4 (->Rule (nth rf 1) `(replace (constantly ~(nth rf 3))) nil {:match-on :node})
           5 (->Rule (nth rf 1) `(replace (constantly ~(nth rf 4)))
                     {:loc-as (nth rf 1) :bindings-as (nth rf 1)}))
-        :else nil))
+        :else rf))
 
 ;;to make rules work with the :match-on option, one has to
 ;; 1. determine the superset of keys to match on from all the rules
@@ -470,7 +473,6 @@
         or-gensym (fn [f] (fn [v] (or (f v) (gensym (str f)))))]
     ((juxt (or-gensym :node) (or-gensym :loc) (or-gensym :bindings)) match-on-map)))
 
-
 (defmacro rules
   "every arg should be either a (rule ...) or (strategic-rule ...)
   form or a globally bound variable to a rule. WARNING: Does not
@@ -479,8 +481,11 @@
   [& rules]
   (let [rules (->> rules
                    (map build-rule)
-                   (map #(or (when-let [var (and (symbol? %) (resolve %))]
-                               (var-get var)) %)))]
+                   (map #(if (symbol? %)
+                          (if-let [var (resolve %)]
+                            (var-get var)
+                            (assert false (str "couldn't resolve " % " to a rule")))
+                          %)))]
     `(strategy [[b# loc# :as state#] c#]
        (combine (m/match [((:zip-node b#) loc#) loc# b#]
                   ~@(interleave
@@ -488,7 +493,9 @@
                      (map :rhspat rules))
                   :else fail) state# c#))))
 
-
+(defmacro defrules [name & rest]
+  (let [[name args] (ctm/name-with-attributes name rest)]
+    `(def ~name (rules ~@args))))
 
 
 ;; Local Variables:

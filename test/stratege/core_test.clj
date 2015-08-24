@@ -33,7 +33,6 @@
   (is (nil? ((s/all (s/replace {1 2})) [1 2])))
   (is (= 1 ((s/all s/fail) 1))))
 
-
 (deftest test-one
   (is (= [2 1] ((s/one (s/replace {1 2})) [1 1])))
   (is (= [2 2] ((s/one (s/replace {1 2})) [1 2])))
@@ -88,13 +87,11 @@
   (is (= [2 [3 "replaced" [2 "replaced"]]]
          ((s/sometd (s/replace {1 "replaced"})) [2 [3 1 [2 1]]]))))
 
-
 (deftest test-?-!
   (is (= 1 ((s/<* (s/? '?a) (s/! '?a)) 1)))
   (is (nil? ((s/<* (s/? '?a) (s/! 2) (s/? '?a)) 1)))
   (is (= 1 ((s/? '?a) 1)))
   (is (= 2 ((s/! 2) 1))))
-
 
 (deftest test-scope
   (is (= '?a ((s/<* (s/scope '[?a] (s/? '?a)) (s/! '?a)) 1))))
@@ -103,7 +100,6 @@
 (deftest test-where
   (is (= 1 ((s/<* (s/where (s/<* (s/? '?a) (s/! 2))) (s/! '?a)) 1))))
 
-
 (deftest test-replace
   (is (= 2 ((s/replace {1 2}) 1))))
 
@@ -111,17 +107,24 @@
   (is (nil? ((s/guard sequential? s/id) 1)))
   (is (= [1] ((s/guard sequential? s/id) [1]))))
 
-
 (deftest test-emit-bindings
   (is (= {'?a 1} (first ((s/<* (s/? '?a) (s/emit-bindings ['?a])) 1)))))
 
-
 (deftest test-match-replace
-  (is (= [2 1] ((s/match-replace [[+ ?a ?b]] [?b ?a]) ['+ 1 2]))))
-
+  (is (= [2 1] ((s/match-replace [+ ?a ?b] [?b ?a]) ['+ 1 2]))))
 
 (deftest test-strategic-match
   (is (= [{:a 1, :b 2} ['+ 1 2]]
-         ((s/<* (s/strategic-match [[+ ?a ?b]] (s/put-bindings {:a ?a :b ?b}))
+         ((s/<* (s/strategic-match [+ ?a ?b] (s/put-bindings {:a ?a :b ?b}))
               (s/emit-bindings [:a :b]))
-          ['+ J1 2]))))
+          ['+ 1 2]))))
+
+(deftest test-leavestd
+  (is (= ((-> (fn [node] (when (and (integer? node) (< node 3)) [(inc node) "hi"]))
+              s/replace s/attempt s/leavestd) [1])
+         [[[3 "hi"] "hi"]])))
+
+(deftest test-leavesbu
+  (is (= ((-> (fn [node] (when (and (integer? node) (< node 3)) [(inc node) "hi"]))
+              s/replace s/attempt s/leavesbu) [1])
+         [[2 "hi"]])))
