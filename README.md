@@ -260,7 +260,8 @@ the ascend. Succeeds iff all applications of s succeeded.
 (defn downup [s] (<* s (all (rec downup s)) s))
 ```
 
-downup2 is like downup but applies s1 on the descend and s2 on the ascend.
+downup2 is like downup, but it takes two strategies s1 and s2 as
+arguments and applies s1 on the descend and s2 on the ascend.
 
 #### onebu and onetd
 
@@ -455,3 +456,10 @@ The beginning example is a direct translation from an example in the
 manual. It also discusses some topics addressed here in greater depth
 and I would suggest you to look into it if you are interested in
 strategic term rewriting and part of the rationale behind stratege.
+
+the ; in stratego corresponds to stratege's <* and try has been
+renamed to attempt, the ? in stratego is more powerful than the ? in
+stratege but uses of ? in stratego are more adequatly translated with
+the strategic-match macro in stratege, there are no congruences yet,
+but they can be simulated with strategic-match and zipper movement
+strategies. {x1,...,xn : s} is (scope [x1 ... xn] s) in stratege.
