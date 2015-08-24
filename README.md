@@ -63,18 +63,28 @@ Add the following line to your leiningen dependencies: (not jet released!)
 
 In the example given above, rules are constructed and given a name
 with the defrule macro from stratege.core. (defrule name rule-args) is
-just a shortcut for (def name (rule rule-args)).
-In the simple case, rule takes 3 arguments, the left-hand-side pattern, some thing in the middle, and the right-hand-side pattern and acts on the current node. The patterns use normal core.match syntax.
+just a shortcut for (def name (rule rule-args)). In the simple case,
+rule takes 3 arguments, the left-hand-side pattern, some thing in the
+middle, and the right-hand-side pattern and acts on the current node.
+The patterns use normal core.match syntax.
 
-A rule can be called as a function or combined with other rules in a (rules ...) form.
+A rule can be called as a function or combined with other rules in a
+(rules ...) form.
 
-```clojure
-(is (= (defi [:impl :x :y]) [:or [:not :x] :y]))
-```
-In a (rules ...) form all arguments must be either calls to the rule (or strategic-rule explained later) macro or vars pointing to a defined rule. All the rules in a (rules ...) form are compiled to a clojure.core.match/match call. This way, the matching rule can be determined by a single sweep through the expression instead of a sweep per rule.
+```clojure (is (= (defi [:impl :x :y]) [:or [:not :x] :y])) ```
 
-If you don't want to name the rules and reuse them elsewhere, then the match-replace macro provides a more direct resemblance to the pattern matching that is going on.
-The next example shows how to evaluate a simple logical formula.
+In a
+(rules ...) form all arguments must be either calls to the rule (or
+strategic-rule explained later) macro or vars pointing to a defined
+rule. All the rules in a (rules ...) form are compiled to a
+clojure.core.match/match call. This way, the matching rule can be
+determined by a single sweep through the expression instead of a sweep
+per rule.
+
+If you don't want to name the rules and reuse them elsewhere, then the
+match-replace macro provides a more direct resemblance to the pattern
+matching that is going on. The next example shows how to evaluate a
+simple logical formula.
 
 ```clojure
 (require '[stratege.core :as s])
@@ -92,7 +102,9 @@ The next example shows how to evaluate a simple logical formula.
    [:not true] false))
 ```
 
-Rules are just special cases of strategies. While with the Rules you specify what you are transforming, the strategies specify how the term is walked and where and how often the rules are applied.
+Rules are just special cases of strategies. While with the Rules you
+specify what you are transforming, the strategies specify how the term
+is walked and where and how often the rules are applied.
 
 One example of a strategy is the innermost strategy used in the first
 example. It exhaustively applies the given strategy in a bottomup
@@ -100,15 +112,41 @@ fashion until a normal form is reached.
 
 Innermost application is sometimes too much. Part of the rationale of
 using strategies and strategy combinators is having finer control
-about rule application. In the case of propagate-constants-rules, a single bottomup traversal of the term would be enough. However, it may not be the most efficient. With the
-[:and false x] rule, a possible large subterm x doesn't need to be traversed at all. Therefore, a single downup traversal is more adequate.
+about rule application. In the case of propagate-constants-rules, a
+single bottomup traversal of the term would be enough. However, it may
+not be the most efficient. With the [:and false x] rule, a possible
+large subterm x doesn't need to be traversed at all. Therefore, a
+single downup traversal is more adequate.
 
 ```clojure
 (def propagate-constants (s/downup propagate-constants-rules)
 (is (= true (propagate-constants [:and true [:or true false]])))
 ```
 
-The following is a list of the strategies provided by stratege.
+While strategies can be called like rules on a term and return a term
+or nil when they failed, internally the strategies get and return a
+pair of
+- a binding map and
+- the current zipper location.
+
+The bindings map provides means of passing along information during
+the traversal, for example defined variables when doing contextual
+analysis of a program. It also stores the currently used zipper functions.
+
+Operating on the zipper instead of the term gives the strategies the
+ability to move around the location and also to inspect the terms
+surrounding context.
+
+Therefore, the two main problems of term rewriting can be lessened
+with stratege. Composeable strategies relieve the intertwinging of
+rule application and traversal definitions and operating on zippers
+gives access to the surrounding context when needed.
+
+Additionally, strategies in stratege are implemented in a continuation
+passing style, which allows recursive strategy definitions without
+risking stack overflow on big terms. This enables the use of core strategy
+combinators to define high level strategies like bottomup etc.
+
 
 ### higher level traversal strategies
 
