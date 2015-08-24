@@ -6,8 +6,8 @@ A clojure library for strategic term rewriting.
 ```clojure
 (require '[stratege.core :as s :refer [defrule rules]])
 
-(defrule def-i [:impl x y] -> [:or [:not x] y])
-(defrule def-e [:eq x y] -> [:and [:impl x y] [:impl y x]])
+(defrule defi [:impl x y] -> [:or [:not x] y])
+(defrule defe [:eq x y] -> [:and [:impl x y] [:impl y x]])
 
 (defrule dn    [:not [:not x]] -> x)
 
@@ -20,8 +20,8 @@ A clojure library for strategic term rewriting.
 (defrule doal  [:or [:and x y] z] -> [:and [:or x z] [:or y z]])
 (defrule doar  [:or z [:and x y]] -> [:and [:or z x] [:or z y]])
 
-(def dnf (s/innermost (rules dn def-i def-e dma dmo daol daor)))
-(def cnf (s/innermost (rules dn defn-i def-e dma dmo doal doar)))
+(def dnf (s/innermost (rules dn defi defe dma dmo daol daor)))
+(def cnf (s/innermost (rules dn defi defe dma dmo doal doar)))
 
 (is (= (dnf [:not [:or [:and [:not :x] :y] :z]])
        [:or [:and :x [:not :z]] [:and [:not :y] [:not :z]]]))
