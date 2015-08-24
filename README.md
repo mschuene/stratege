@@ -71,7 +71,9 @@ The patterns use normal core.match syntax.
 A rule can be called as a function or combined with other rules in a
 (rules ...) form.
 
-```clojure (is (= (defi [:impl :x :y]) [:or [:not :x] :y])) ```
+```clojure
+(is (= (defi [:impl :x :y]) [:or [:not :x] :y]))
+```
 
 In a
 (rules ...) form all arguments must be either calls to the rule (or
