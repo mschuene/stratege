@@ -23,11 +23,28 @@ A clojure library for strategic term rewriting.
 (def dnf (s/innermost (rules dn defi defe dma dmo daol daor)))
 (def cnf (s/innermost (rules dn defi defe dma dmo doal doar)))
 
-(is (= (dnf [:not [:or [:and [:not :x] :y] :z]])
-       [:or [:and :x [:not :z]] [:and [:not :y] [:not :z]]]))
+(is (= (dnf [:or [:not [:or [:not :x] :y]] :z])
+       [:or [:and :x [:not :y]] :z]))
 
-(is (= (cnf [:not [:or [:and [:not :x] :y] :z]])
-       [:and
-        [:and [:or :x [:not :y]] [:or :x [:not :z]]]
-        [:and [:or [:not :z] [:not :y]] [:or [:not :z] [:not :z]]]]))
+(is (= (cnf [:or [:not [:or [:not :x] :y]] :z])
+       [:and [:or :x :z] [:or [:not :y] :z]]))
 ```
+
+### Rationale
+
+Many data transformations can be expressed by term rewriting in a
+natural way. There are already great libraries for matrix programming,
+logic programming, async programming, etc. for clojure but term
+rewriting seems to be a gap in the clojure ecosystem.
+
+There are some libraries like kibit, termito and expresso which define a term rewriting system, but on top of core.logic and they are prone to stack overflows on deeply nested terms. Indeed, part of my motivation to write stratege stem from the desire to have a better core term rewriting system for expresso.
+
+Stratege is based on the following key ideas:
+- operate on terms through zippers.
+- separate rules from strategies and expose composeable strategy combinators to define
+  the traversals like StrategoXT does.
+- strategies are internally written in a continuation passing style so that they don't
+  blow up the stack.
+- use core.match for rule definitions.
+
+
