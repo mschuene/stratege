@@ -57,7 +57,7 @@ Stratege is based on the following key ideas:
 Add the following line to your leiningen dependencies:
 
 ```clojure
-[stratege "0.1.0"]
+[stratege "0.1.2"]
 ```
 
 ### Rules and strategies

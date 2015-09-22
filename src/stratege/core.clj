@@ -6,7 +6,6 @@
             [clojure.set :as set]
             [fast-zip.core :as zip]
             [clojure.tools.macro :as ctm]
-            [criterium.core :as crit]
             [stratege.cps :refer [call let-cps reduce-cps]]))
 
 ;; a strategy takes a tuple of a binding map and a location together
@@ -299,7 +298,7 @@
 (defn update-bindings
   "updates the current binding map with the given aguments"
   [& update-args]
-  (on-node (fn [[b t]] (t/vector (apply update b update-args) t))))
+  (on-node (fn [[b t]] (t/vector (apply update-in [b] update-args) t))))
 
 (defn ?
   "if var-or-value is a symbol strating with ?, the current term is

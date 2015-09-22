@@ -119,12 +119,8 @@
               (s/emit-bindings [:a :b]))
           ['+ 1 2]))))
 
-(deftest test-leavestd
-  (is (= ((-> (fn [node] (when (and (integer? node) (< node 3)) [(inc node) "hi"]))
-              s/replace s/attempt s/leavestd) [1])
-         [[[3 "hi"] "hi"]])))
 
-(deftest test-leavesbu
+(deftest test-leaves
   (is (= ((-> (fn [node] (when (and (integer? node) (< node 3)) [(inc node) "hi"]))
-              s/replace s/attempt s/leavesbu) [1])
+              s/replace s/attempt s/leaves) [1])
          [[2 "hi"]])))
