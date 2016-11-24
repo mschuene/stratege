@@ -1,4 +1,4 @@
-(defproject stratege "0.1.2"
+(defproject stratege "0.1.3-SNAPSHOT"
   :description "Strategic term rewriting for clojure"
   :url "https://github.com/mschuene/stratege"
   :license {:name "Eclipse Public License"

@@ -5,6 +5,7 @@
             [clojure.core.match :as m]
             [clojure.set :as set]
             [fast-zip.core :as zip]
+            ;[clojure.zip :as zip]
             [clojure.tools.macro :as ctm]
             [stratege.cps :refer [call let-cps reduce-cps]]))
 
@@ -284,8 +285,10 @@
   then replaced."
   [f]
   (on-node (fn [[b node]]
-             (when-let [new-node (f node)]
-               (t/vector b new-node)))))
+             (let [new-node (f node)]
+               (if (not (nil? new-node))
+                 (let [res (t/vector b new-node)]
+                   res))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Match Build and Variable Binding
@@ -350,7 +353,7 @@
   It is only applied if the current node fullfils predicate?.
   shorthand for (<* (where (replace predicate?)) strategy)"
   [predicate? strategy]
-  (<* (where (replace predicate?)) strategy))
+  (<* (where (replace #(or (predicate? %) nil))) strategy))
 
 (defn emit-bindings
   "replaces current node with [current-bindings node]"
@@ -434,7 +437,7 @@
     `(def ~name (strategic-rule ~@args))))
 
 (defmacro rule
-  "a rule that replaces the current term with the rhs on successful
+  "a rule that replace
   match. Accepts an option map as optional first argument. See
   strategic-match for details."
   ([lhs -> rhs] `(rule {:match-on :node} ~lhs -> ~rhs))
@@ -476,7 +479,7 @@
   (let [matched-on (:match-on (:options-map rule))
         match-on-map (if (keyword? matched-on) {matched-on (:lhspat rule)}
                          (zipmap matched-on (:lhspat rule)))
-        or-gensym (fn [f] (fn [v] (or (f v) (gensym (str f)))))]
+        or-gensym (fn [f] (fn [v] (let [res (f v)] (if (not (nil? res)) res (gensym (str f))))))]
     ((juxt (or-gensym :node) (or-gensym :loc) (or-gensym :bindings)) match-on-map)))
 
 (defmacro rules

@@ -124,3 +124,11 @@
   (is (= ((-> (fn [node] (when (and (integer? node) (< node 3)) [(inc node) "hi"]))
               s/replace s/attempt s/leaves) [1])
          [[2 "hi"]])))
+
+
+(def r1 (s/rule false -> false))
+(deftest test-false-is-not-nil
+  (= false ((s/rules r1) false)))
+
+
+

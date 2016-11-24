@@ -91,17 +91,18 @@ simple logical formula.
 ```clojure
 (require '[stratege.core :as s])
 (def propagate-constants-rules
-  (s/match-replace
-   [:and true x] x
-   [:and x true] x
-   [:and false x] false
-   [:and x false] false
-   [:or true x] true
-   [:or x true] true
-   [:or false x] x
-   [:or x false] x
-   [:not false] true
-   [:not true] false))
+  (s/attempt
+    (s/match-replace
+       [:and true x] x
+       [:and x true] x
+       [:and false x] false
+       [:and x false] false
+       [:or true x] true
+       [:or x true] true
+       [:or false x] x
+       [:or x false] x
+       [:not false] true
+       [:not true] false)))
 ```
 
 Rules are just special cases of strategies. While with the Rules you
